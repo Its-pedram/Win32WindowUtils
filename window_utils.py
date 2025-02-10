@@ -10,6 +10,13 @@ GWL_EXSTYLE = (
     -20
 )  # https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowlongptra
 SW_MINIMIZE = 6  # https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
+WS_EX_TOOLWINDOW = 0x00000080
+WS_EX_APPWINDOW = 0x00040000
+WS_EX_TOPMOST = 0x00000008
+GWL_STYLE = -16
+GW_OWNER = 4
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
 
 def get_hwnd_from_title(title: str) -> int:
     """
@@ -69,6 +76,37 @@ def get_all_windows():
     return windows
 
 
+def get_all_user_windows():
+    """
+    Get windows that are visible in the taskbar (i.e. user-accessible).
+    """
+    windows = {}
+
+    def enum_windows_proc_callback(hwnd, l_param):
+        if not ctypes.windll.user32.IsWindowVisible(hwnd):
+            return True
+
+        style = ctypes.windll.user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+        if style & WS_EX_TOOLWINDOW:
+            return True
+
+        if ctypes.windll.user32.GetWindow(hwnd, GW_OWNER):
+            return True
+
+        title = get_title_from_hwnd(hwnd)
+        if title:
+            windows[hwnd] = title
+        return True
+
+    ctypes.windll.user32.EnumWindows(
+        ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)(
+            enum_windows_proc_callback
+        ),
+        0,
+    )
+    return windows
+
+
 def set_window_opacity(hwnd: int, opacity: int):
     """
     Set the opacity of a window.
@@ -111,3 +149,34 @@ def minimize_window(hwnd: int):
     https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
     """
     ctypes.windll.user32.ShowWindow(hwnd, SW_MINIMIZE)
+
+
+def get_process_name_from_hwnd(hwnd: int) -> str:
+    """
+    Get the name of the process associated with a window handle (hwnd) without using psutil.
+
+    :param hwnd: The window handle (hwnd) of the window.
+    :return: The process name or an empty string if not found.
+    """
+    pid = ctypes.c_ulong()
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+
+    kernel32 = ctypes.windll.kernel32
+    process_handle = kernel32.OpenProcess(
+        PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value
+    )
+
+    if not process_handle:
+        return ""
+
+    buffer = ctypes.create_unicode_buffer(260)
+    size = ctypes.c_ulong(260)
+    if kernel32.QueryFullProcessImageNameW(
+        process_handle, 0, buffer, ctypes.byref(size)
+    ):
+        full_path = buffer.value
+        process_name = full_path.split("\\")[-1]
+    else:
+        process_name = ""
+    kernel32.CloseHandle(process_handle)
+    return process_name
