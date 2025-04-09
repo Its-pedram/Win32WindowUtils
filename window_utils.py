@@ -10,6 +10,8 @@ GWL_EXSTYLE = (
     -20
 )  # https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowlongptra
 SW_MINIMIZE = 6  # https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
+SC_MINIMIZE = 0xF020
+WM_SYSCOMMAND = 0x0112
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_APPWINDOW = 0x00040000
 WS_EX_TOPMOST = 0x00000008
@@ -144,11 +146,31 @@ def minimize_window(hwnd: int):
     """
     Minimize a window by its window handle (hwnd).
 
+    :param hwnd: The window handle (hwnd) of the window.
+
     Relevant win32 documentation:
     ----------------------------
     https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
     """
     ctypes.windll.user32.ShowWindow(hwnd, SW_MINIMIZE)
+
+
+def minimize_window_syscommand(hwnd: int):
+    """
+    Minimize a window using WM_SYSCOMMAND message (and a window handle). \n
+    The previous `minimize_window()` function exhibited some strange behavior:
+    - The user's focus would be lost upon minimizing the window.
+    - The desktop would show milliseconds of darkness after minimizing the window.
+    
+
+    :param hwnd: The window handle (hwnd) of the window.
+
+    Relevant win32 documentation:
+    ----------------------------
+    https://learn.microsoft.com/en-us/windows/win32/menurc/wm-syscommand
+    https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessage
+    """
+    ctypes.windll.user32.SendMessageW(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0)
 
 
 def get_process_name_from_hwnd(hwnd: int) -> str:
